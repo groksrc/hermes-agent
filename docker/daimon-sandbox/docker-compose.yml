@@ -23,18 +23,18 @@ services:
     networks:
       - daimon-net
 
-    # Secrets (GH token file)
-    secrets:
-      - gh_token
-
-    # Volumes — persist the shared hermes-agent clone + venv across restarts
-    # Read-only for the agent user (systemd timer does git pull as root via docker exec)
+    # GitHub token: bind-mounted as root:root 600 from host.
+    # The agent user (uid 1000) CANNOT read this file.
+    # Only the credential-server (root) can read it and serve via socket.
+    #
+    # Setup on host (once, as root):
+    #   mkdir -p /home/daimon/.hermes/profiles/daimon/secrets
+    #   echo "github_pat_..." > /home/daimon/.hermes/profiles/daimon/secrets/gh_token
+    #   chmod 600 /home/daimon/.hermes/profiles/daimon/secrets/gh_token
+    #   chown root:root /home/daimon/.hermes/profiles/daimon/secrets/gh_token
     volumes:
       - hermes-repo:/opt/hermes-agent:ro
-
-secrets:
-  gh_token:
-    file: ./secrets/gh_token.txt
+      - ${GH_TOKEN_PATH:-./secrets/gh_token.txt}:/run/secrets/gh_token:ro
 
 volumes:
   hermes-repo:
