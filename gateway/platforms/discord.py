@@ -4347,6 +4347,13 @@ class DiscordAdapter(BasePlatformAdapter):
         if pending_text_injection:
             event_text = f"{pending_text_injection}\n\n{event_text}" if event_text else pending_text_injection
 
+        # For forum posts: prepend the thread title as context so the agent
+        # knows what the support request is about even if the user just says "@daimon help"
+        if is_thread and self._is_forum_parent(getattr(message.channel, "parent", None)):
+            _thread_title = getattr(message.channel, "name", None)
+            if _thread_title and _thread_title.strip():
+                event_text = f"[Forum post: {_thread_title}]\n\n{event_text}"
+
         # Defense-in-depth: prevent empty user messages from entering session
         # (can happen when user sends @mention-only with no other text)
         if not event_text or not event_text.strip():
