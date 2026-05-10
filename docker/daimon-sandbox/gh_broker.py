@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-BROKER_HOST = os.environ.get("DAIMON_GH_BROKER_HOST", "0.0.0.0")
+BROKER_HOST = os.environ.get("DAIMON_GH_BROKER_HOST", "0.0.0.0")  # nosec B104 — intentional: container-internal only, isolated Docker network
 BROKER_PORT = int(os.environ.get("DAIMON_GH_BROKER_PORT", "7842"))
 TOKEN_PATH = os.environ.get("GH_TOKEN_FILE", "/run/secrets/gh_token")
 GH_REAL = os.environ.get("GH_REAL", "/usr/bin/gh")
