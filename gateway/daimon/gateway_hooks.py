@@ -26,13 +26,15 @@ def get_agent_overrides(
     raw_config: dict,
     user_id: str,
     platform: str,
+    role_ids: Optional[list[str]] = None,
 ) -> Optional[AgentOverrides]:
     """Get Daimon tier-based overrides for agent construction.
 
     Called by gateway/run.py before constructing AIAgent.
     Returns None if Daimon is not active or platform is not Discord.
+    Returns AgentOverrides with tier=None if user should be silently ignored.
     """
-    return compute_overrides(raw_config, user_id, platform)
+    return compute_overrides(raw_config, user_id, platform, role_ids=role_ids)
 
 
 def load_system_prompt() -> str:
