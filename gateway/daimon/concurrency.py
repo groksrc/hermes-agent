@@ -61,6 +61,10 @@ class ConcurrencyManager:
             (acquired, queue_position) — queue_position is 0 if acquired.
         """
         with self._lock:
+            # Idempotency: if thread already active, return success (no double-count)
+            if thread_id in self._active:
+                return (True, 0)
+
             # Check daily limit
             self._prune_daily(user_id)
             usage = self._daily_usage.get(user_id, [])
