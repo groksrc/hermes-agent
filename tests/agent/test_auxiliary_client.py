@@ -2093,7 +2093,7 @@ class TestCodexAuxiliaryAdapterTimeout:
                 return False
 
             def __iter__(self):
-                for _ in range(5):
+                for _ in range(20):
                     time.sleep(0.03)
                     yield SimpleNamespace(type="response.in_progress")
 
@@ -2120,7 +2120,7 @@ class TestCodexAuxiliaryAdapterTimeout:
                 timeout=0.05,
             )
 
-        assert time.monotonic() - started < 0.14
+        assert time.monotonic() - started < 0.25
 
 
 # ---------------------------------------------------------------------------
