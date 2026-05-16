@@ -97,6 +97,8 @@ _PLUGINS_DEBUG = os.getenv("HERMES_PLUGINS_DEBUG", "").strip().lower() in {
     "1", "true", "yes", "on",
 }
 _DEBUG_HANDLER_INSTALLED = False
+_memory_provider_command_loads: Set[str] = set()
+_memory_provider_command_loading = False
 
 
 def _install_plugin_debug_handler(force: bool = False) -> None:
@@ -2342,7 +2344,9 @@ def get_plugin_context_engine():
 
 def get_plugin_command_handler(name: str) -> Optional[Callable]:
     """Return the handler for a plugin-registered slash command, or ``None``."""
-    entry = _ensure_plugins_discovered()._plugin_commands.get(name)
+    manager = _ensure_plugins_discovered()
+    _ensure_active_memory_provider_commands_loaded()
+    entry = manager._plugin_commands.get(name)
     return entry["handler"] if entry else None
 
 
@@ -2395,13 +2399,50 @@ def resolve_plugin_command_result(result: Any) -> Any:
     return outcome.get("value")
 
 
+def _ensure_active_memory_provider_commands_loaded() -> None:
+    """Best-effort load of the active memory provider's slash commands.
+
+    Memory-provider plugins are exclusive and are loaded through
+    ``plugins.memory`` rather than normal PluginManager discovery.  Loading the
+    active provider here lets it contribute slash commands/skills before gateway
+    adapters sync native command lists.
+    """
+    global _memory_provider_command_loading
+    if _memory_provider_command_loading:
+        return
+
+    try:
+        from plugins import memory as memory_plugins
+
+        active = memory_plugins._get_active_memory_provider()
+        if not active or active in _memory_provider_command_loads:
+            return
+
+        _memory_provider_command_loading = True
+        try:
+            memory_plugins.load_memory_provider(active)
+            _memory_provider_command_loads.add(active)
+        finally:
+            _memory_provider_command_loading = False
+    except Exception as exc:
+        logger.debug(
+            "Failed to load active memory-provider plugin commands: %s",
+            exc,
+            exc_info=_PLUGINS_DEBUG,
+        )
+
+
 def get_plugin_commands() -> Dict[str, dict]:
     """Return the full plugin commands dict (name → {handler, description, plugin}).
 
     Triggers idempotent plugin discovery so callers can use plugin commands
-    before any explicit discover_plugins() call.
+    before any explicit discover_plugins() call. Also initializes the active
+    memory provider once so exclusive memory-provider plugins can contribute
+    gateway slash commands during startup discovery.
     """
-    return _ensure_plugins_discovered()._plugin_commands
+    manager = _ensure_plugins_discovered()
+    _ensure_active_memory_provider_commands_loaded()
+    return manager._plugin_commands
 
 
 def get_plugin_auxiliary_tasks() -> List[Dict[str, Any]]:

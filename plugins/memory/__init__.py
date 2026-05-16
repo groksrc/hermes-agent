@@ -27,7 +27,7 @@ import importlib.util
 import logging
 import sys
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 from hermes_cli.config import cfg_get
 
 logger = logging.getLogger(__name__)
@@ -294,7 +294,7 @@ def _load_provider_from_dir(provider_dir: Path) -> Optional["MemoryProvider"]:
 
     # Try register(ctx) pattern first (how our plugins are written)
     if hasattr(mod, "register"):
-        collector = _ProviderCollector()
+        collector = _ProviderCollector(plugin_name=name)
         try:
             mod.register(collector)
             if collector.provider:
@@ -317,13 +317,85 @@ def _load_provider_from_dir(provider_dir: Path) -> Optional["MemoryProvider"]:
 
 
 class _ProviderCollector:
-    """Fake plugin context that captures register_memory_provider calls."""
+    """Plugin-context shim used while loading memory providers.
 
-    def __init__(self):
+    Memory providers are exclusive plugins and are loaded by this module
+    instead of the general PluginManager. They still need access to the same
+    slash-command and skill registries as normal plugins, otherwise active
+    memory-provider commands are invisible during gateway startup discovery.
+    """
+
+    def __init__(self, plugin_name: str = "memory-provider"):
         self.provider = None
+        self.plugin_name = plugin_name
 
     def register_memory_provider(self, provider):
         self.provider = provider
+
+    def register_command(
+        self,
+        name: str,
+        handler: Callable,
+        description: str = "",
+        args_hint: str = "",
+    ) -> None:
+        """Register a memory-provider slash command with PluginManager."""
+        try:
+            from hermes_cli.plugins import _ensure_plugins_discovered
+        except Exception:
+            return
+
+        clean = name.lower().strip().lstrip("/").replace(" ", "-")
+        if not clean:
+            return
+
+        try:
+            manager = _ensure_plugins_discovered()
+        except Exception:
+            return
+
+        plugin_commands = getattr(manager, "_plugin_commands", None)
+        if plugin_commands is None:
+            return
+        plugin_commands[clean] = {
+            "handler": handler,
+            "description": description or "Plugin command",
+            "plugin": self.plugin_name,
+            "args_hint": (args_hint or "").strip(),
+        }
+
+    def register_skill(
+        self,
+        name: str,
+        path: Path,
+        description: str = "",
+    ) -> None:
+        """Register a memory-provider skill with PluginManager."""
+        try:
+            from agent.skill_utils import _NAMESPACE_RE
+            from hermes_cli.plugins import _ensure_plugins_discovered
+        except Exception:
+            return
+
+        if ":" in name or not name or not _NAMESPACE_RE.match(name):
+            raise ValueError(f"Invalid skill name '{name}'.")
+        if not path.exists():
+            raise FileNotFoundError(f"SKILL.md not found at {path}")
+
+        try:
+            manager = _ensure_plugins_discovered()
+        except Exception:
+            return
+
+        plugin_skills = getattr(manager, "_plugin_skills", None)
+        if plugin_skills is None:
+            return
+        plugin_skills[f"{self.plugin_name}:{name}"] = {
+            "path": path,
+            "plugin": self.plugin_name,
+            "bare_name": name,
+            "description": description,
+        }
 
     # No-op for other registration methods
     def register_tool(self, *args, **kwargs):
